@@ -1,0 +1,86 @@
+# ansible_port can change throughout this role, keep a copy around
+- name: Set configured port fact
+  set_fact:
+    configured_port: "{{ ubuntu_common_ssh_port }}"
+
+# From localhost, check if we're able to reach {{ inventory_hostname }} on
+# port 22
+- name: Check if we're using the default SSH port
+  wait_for:
+    port: "22"
+    state: "started"
+    host: "{{ inventory_hostname }}"
+    connect_timeout: "5"
+    timeout: "10"
+  delegate_to: "localhost"
+  ignore_errors: "yes"
+  become: no
+  register: default_ssh
+
+# If reachable, continue the following tasks with this port
+- name: Set inventory ansible_port to default
+  set_fact:
+    ansible_port: "22"
+  when: default_ssh is defined and
+        default_ssh.state == "started"
+  register: ssh_port_set
+
+# If unreachable on port 22, check if we're able to reach
+# {{ inventory_hostname }} on {{ ansible_port }} provided by the inventory
+# from localhost
+- name: Check if we're using the inventory-provided SSH port
+  wait_for:
+    port: "{{ ubuntu_common_ssh_port }}"
+    state: "started"
+    host: "{{ inventory_hostname }}"
+    connect_timeout: "5"
+    timeout: "10"
+  delegate_to: "localhost"
+  ignore_errors: "yes"
+  become: no
+  register: configured_ssh
+  when: default_ssh|failed
+
+- name: Configure ansible_port to match vars
+  set_fact:
+    ansible_port: "{{ configured_port }}"
+  when: default_ssh|failed
+
+# If {{ ansible_port }} is reachable, we don't need to do anything special
+- name: SSH port is configured properly
+  debug:
+    msg: "SSH port is configured properly"
+  when: configured_ssh is defined and
+        configured_ssh.state is defined and
+        configured_ssh.state == "started"
+  register: ssh_port_set
+
+# If the SSH port is neither the default or the configured, give up.
+- name: Fail if SSH port was not auto-detected (unknown)
+  fail:
+    msg: "The SSH port is neither 22 or {{ ansible_port }}."
+  when: ssh_port_set is undefined
+
+# Check if we can connect with current user or whether we need to flip to the
+# admin user. If the private key exists we've already configured them.
+- name: check for user private key
+  local_action: stat path="{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ ubuntu_common_deploy_user_name }}/{{ default_ssh_key }}"
+  become: no
+  register: adminlocal_exists
+
+- name: get adminlocal password
+  set_fact:
+    admin_password: "{{ lookup('file', '{{ local_deploy_path }}/password/{{ inventory_hostname }}/{{ ubuntu_common_deploy_user_name }}.txt').split()[0] }}"
+  become: no
+  when: adminlocal_exists.stat.exists == True
+
+- debug:
+    msg: "Password set to {{ admin_password }}"
+  when: admin_password is defined
+
+- name: switch user
+  set_fact:
+    ansible_user: "{{ ubuntu_common_deploy_user_name }}"
+    ansible_ssh_private_key_file: "{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ ubuntu_common_deploy_user_name }}/{{ default_ssh_key }}"
+    ansible_become_pass: "{{ admin_password }}"
+  when: adminlocal_exists.stat.exists == True

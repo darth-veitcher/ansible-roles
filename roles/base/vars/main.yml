@@ -1,0 +1,38 @@
+---
+# file: roles/common/vars/main.yml
+
+local_deploy_path: deploy
+
+ubuntu_common_required_packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - logwatch
+  - software-properties-common
+  - python2.7
+  - python-apt
+
+ubuntu_common_optional_packages:
+  - python
+  - python-dev
+  - git
+  - p7zip-full
+  - unzip
+  - ntp
+  - nfs-common
+  - screen
+
+ubuntu_common_ssh_port: 22222
+
+ubuntu_common_deploy_user_name: jamesveitch
+
+ubuntu_common_logwatch_email: saracen9@gmail.com
+
+default_ssh_key: ansible.id_rsa
+
+ssh_users:
+    - name: "{{ ubuntu_common_deploy_user_name }}"
+
+users:
+  - name: root
+  - "{{ ssh_users }}"

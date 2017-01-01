@@ -1,0 +1,187 @@
+---
+# file: base/tasks/main.yml
+- name: bootstrap ansible requirements
+  raw: sudo apt-get install software-properties-common python2.7 python-apt -y
+
+# Gather facts should be set to false when running this role since it will
+# fail if the Ansible SSH port is not set correctly.
+# We run setup to gather facts here once the SSH port is set up.
+- name: Run deferred setup to gather facts
+  setup:
+  when: ssh_port_set is defined
+
+# APT
+- name: update APT package cache
+  apt: update_cache=yes cache_valid_time=3600
+
+- name: install aptitude
+  apt: name=aptitude state=installed
+
+- name: upgrade APT to the latest packages
+  apt: upgrade=safe
+
+- name: install core packages
+  apt: name={{ item }} state=installed
+  with_items: "{{ ubuntu_common_required_packages }}"
+  tags: base
+
+- name: install optional packages
+  apt: name={{ item }} state=installed
+  with_items: "{{ ubuntu_common_optional_packages }}"
+  tags: base
+
+- name: adjust APT update intervals
+  copy: src=files/apt_periodic dest=/etc/apt/apt.conf.d/10periodic
+
+# Users
+- name: create users with auto generated password
+  user:
+    name: "{{ item.name }}"
+    password: "{{ lookup('password', '{{ local_deploy_path }}/password/{{ inventory_hostname }}/{{ item.name }}.txt chars=ascii_letters,digits length=15 encrypt=md5_crypt') }}"
+    state: present
+    update_password: on_create # always / on_create
+    createhome: yes
+    generate_ssh_key: yes
+    ssh_key_bits: 4096
+    ssh_key_file: ".ssh/{{ default_ssh_key }}"
+  with_items: "{{ users }}"
+  tags: users
+
+- name: add {{ ubuntu_common_deploy_user_name }} to `sudo`
+  user:
+    name: "{{ ubuntu_common_deploy_user_name }}"
+    groups: sudo
+    append: yes
+  tags: users
+
+- name: fetch user's public keys
+  fetch:
+    src: "/home/{{ item.name }}/.ssh/{{ default_ssh_key }}.pub"
+    dest: "{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/"
+    flat: yes
+  with_items: "{{ ssh_users }}"
+  tags: users
+
+- name: fetch user's private keys
+  fetch:
+    src: "/home/{{ item.name }}/.ssh/{{ default_ssh_key }}"
+    dest: "{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/"
+    flat: yes
+  with_items: "{{ ssh_users }}"
+  tags: users
+
+- name: fix local file permissions
+  local_action: file path="{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/{{ default_ssh_key }}" mode=0600
+  with_items: "{{ ssh_users }}"
+  become: no
+  tags: users
+
+- name: authorise public key
+  authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ lookup('file', '{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/{{ default_ssh_key }}.pub') }}"
+    state: present
+  with_items: "{{ ssh_users }}"
+  tags:
+    - users
+    - ssh
+
+# - name: fetch user's passwords
+#   fetch:
+#     src: "{{ '/tmp/passwordfile.' + '{{ item.name }}' + '.txt' }}"
+#     dest: "{{ local_deploy_path }}/passwords/{{ inventory_hostname }}/{{ item.name }}/password.txt"
+#   with_items: "{{ users }}"
+#   tags: users
+
+- name: enable authorized_keys
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^#?AuthorizedKeysFile"
+              line="AuthorizedKeysFile %h/.ssh/authorized_keys"
+              state=present
+  notify: restart ssh
+  tags:
+    - users
+    - ssh
+
+# Logwatch
+- name: Set up Postfix to relay mail
+  debconf: name=postfix
+           question='{{ item.question }}'
+           value='{{ item.value }}'
+           vtype='{{ item.vtype }}'
+  with_items:
+    - { question: 'postfix/mailname', value: '{{ ansible_fqdn }}', vtype: 'string' }
+    - { question: 'postfix/main_mailer_type', value: 'Internet Site', vtype: 'string' }
+  tags: logwatch
+
+- name: Email log summary daily
+  lineinfile: dest=/etc/cron.daily/00logwatch
+              regexp="^/usr/sbin/logwatch"
+              line="/usr/sbin/logwatch --output mail --mailto {{ ubuntu_common_logwatch_email }} --detail high"
+              state=present create=yes
+  tags: logwatch
+
+# Lock down SSH
+- name: disallow password authentication
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^PasswordAuthentication"
+              line="PasswordAuthentication no"
+              state=present
+  notify: restart ssh
+  tags: ssh
+
+- name: disallow root SSH access
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^PermitRootLogin"
+              line="PermitRootLogin no"
+              state=present
+  notify: restart ssh
+  tags: ssh
+
+# UFW
+- name: setup ufw
+  ufw: state=disabled policy=deny  # disable so we can allow SSH first....
+  tags: firewall
+
+- name: modify ufw openssh definition
+  template: >
+            src=templates/ufw/openssh-server.j2
+            dest=/etc/ufw/applications.d/openssh-server owner=root group=root mode=0644
+  tags:
+    - firewall
+    - ssh
+
+- name: allow ssh traffic
+  ufw: rule=allow name=OpenSSH
+  tags: firewall, ssh
+
+- name: create local fail2ban jail
+  template: >
+            src=templates/fail2ban/jail.local.j2
+            dest=/etc/fail2ban/jail.local owner=root group=root mode=0644
+  notify: restart fail2ban
+  tags: firewall
+
+- name: enable fail2ban
+  service: name=fail2ban state=restarted enabled=yes
+  tags: firewall
+
+# FINALLY
+- name: change ssh port
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^Port\s"
+              line="Port {{ ubuntu_common_ssh_port }}"
+              state=present
+  notify: restart ssh
+  tags: ssh
+
+- name: be sure ssh is running and enabled
+  service: name=ssh state=restarted enabled=yes
+  tags: ssh
+
+- include: ./ssh_setup.yml
+
+- name: enable ufw
+  ufw: state=enabled
+  notify: restart ufw
+  tags: firewall
