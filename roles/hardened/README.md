@@ -1,7 +1,7 @@
 # Hardened Edition
 Builds upon the `base` role and adds additional server hardening including:
 
-* [ ]*Potentially* use `vault` as opposed to plaintext storage per
+* [ ] *Potentially* use `vault` as opposed to plaintext storage per
 [docs](http://docs.ansible.com/ansible/playbooks_vault.html).
 * [ ] Create ssh keys using `ssh_key_passphrase` with the
     [User Module](http://docs.ansible.com/ansible/user_module.html).
