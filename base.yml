@@ -1,0 +1,15 @@
+---
+# file: base.yml
+# Need gather_facts and pre_tasks to bootstrap python2 requirements on default
+# Ubuntu install when >= 15.04
+# http://stackoverflow.com/a/34402816
+- hosts: all
+  gather_facts: no
+  environment:
+    ANSIBLE_HOST_KEY_CHECKING: False
+  pre_tasks:
+    - include: roles/base/tasks/ssh_setup.yml
+    - name: install python2
+      raw: sudo apt-get -y install python-simplejson
+  roles:
+    - base

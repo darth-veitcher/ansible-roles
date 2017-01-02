@@ -1,5 +1,5 @@
 ---
-# file: roles/common/vars/main.yml
+# file: roles/base/vars/main.yml
 
 local_deploy_path: deploy
 
@@ -24,15 +24,17 @@ ubuntu_common_optional_packages:
 
 ubuntu_common_ssh_port: 22222
 
-ubuntu_common_deploy_user_name: jamesveitch
+ubuntu_common_deploy_user_name: adminlocal
 
-ubuntu_common_logwatch_email: saracen9@gmail.com
+ubuntu_common_logwatch_email: myemailaddress@dot.com
 
+# this will be used as the `adminlocal` key. Configure as a path
 default_ssh_key: ansible.id_rsa
 
+# only these users will have SSH access to the server
 ssh_users:
     - name: "{{ ubuntu_common_deploy_user_name }}"
 
+# can add additional users here if needed
 users:
-  - name: root
   - "{{ ssh_users }}"

@@ -2,6 +2,7 @@
 # file: base/tasks/main.yml
 - name: bootstrap ansible requirements
   raw: sudo apt-get install software-properties-common python2.7 python-apt -y
+  tags: apt
 
 # Gather facts should be set to false when running this role since it will
 # fail if the Ansible SSH port is not set correctly.
@@ -13,9 +14,11 @@
 # APT
 - name: update APT package cache
   apt: update_cache=yes cache_valid_time=3600
+  tags: apt
 
 - name: install aptitude
   apt: name=aptitude state=installed
+  tags: apt
 
 - name: upgrade APT to the latest packages
   apt: upgrade=safe
@@ -23,24 +26,28 @@
 - name: install core packages
   apt: name={{ item }} state=installed
   with_items: "{{ ubuntu_common_required_packages }}"
-  tags: base
+  tags: apt
 
 - name: install optional packages
   apt: name={{ item }} state=installed
   with_items: "{{ ubuntu_common_optional_packages }}"
-  tags: base
+  tags: apt
 
 - name: adjust APT update intervals
   copy: src=files/apt_periodic dest=/etc/apt/apt.conf.d/10periodic
+  tags: apt
 
 # Users
-- name: create users with auto generated password
+# one of the standard unix schemes of passlib can be used for encrypt
+# https://pythonhosted.org/passlib/lib/passlib.hash.html#standard-unix-schemes
+- name: create users with auto generated password if !exist
   user:
     name: "{{ item.name }}"
-    password: "{{ lookup('password', '{{ local_deploy_path }}/password/{{ inventory_hostname }}/{{ item.name }}.txt chars=ascii_letters,digits length=15 encrypt=md5_crypt') }}"
+    password: "{{ lookup('password', '{{ local_deploy_path }}/password/{{ inventory_hostname }}/{{ item.name }}.txt chars=ascii_letters,digits length=30 encrypt=md5_crypt') }}"  # encrypt=md5_crypt'
     state: present
-    update_password: on_create # always / on_create
+    update_password: on_create  # always / on_create
     createhome: yes
+    shell: /bin/bash
     generate_ssh_key: yes
     ssh_key_bits: 4096
     ssh_key_file: ".ssh/{{ default_ssh_key }}"
@@ -179,6 +186,9 @@
   service: name=ssh state=restarted enabled=yes
   tags: ssh
 
+# Need to run this again to reconfigure dynamically the ansible port now we
+# have changed it on-the-fly. If this fails then the firewall won't be enabled
+# luckily so we can still get back in. That's the final task below.
 - include: ./ssh_setup.yml
 
 - name: enable ufw

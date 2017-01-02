@@ -99,3 +99,8 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# Ansible Testing/Local
+inventory-local
+deploy/*  # have to specifically override what we want to push
+*.retry

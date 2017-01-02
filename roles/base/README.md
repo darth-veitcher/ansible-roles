@@ -48,12 +48,3 @@ echo "sudo apt-get update && sudo apt-get install software-properties-common pyt
 MYCOMMAND=$(base64 /tmp/installer.sh)
 ssh -t adminlocal@ "echo $MYCOMMAND | base64 -d | sudo bash"
 ```
-
-Initial Usage Examples:
-```
-# Run everything
-ansible-playbook -kb --ask-become-pass -i inventoryFile base.yml -vvvv
-
-# Just do the users adjustments
-ansible-playbook -kb --ask-become-pass -i inventoryFile base.yml -t users -vvvv
-```

@@ -1,4 +1,9 @@
 # ansible-roles
-A collection of `roles` for the `ansible` automated deployment tool.
+A collection of `roles` for the [ansible](http://docs.ansible.com/ansible/)
+automated deployment tool.
 
-Work in progress
+## Initial Usage Examples:
+```
+# Uses an (optional) ansible config file
+export ANSIBLE_CONFIG=ansible.cfg && ansible-playbook -kb --ask-become-pass -i inventoryFile base.yml -vvvv
+```
