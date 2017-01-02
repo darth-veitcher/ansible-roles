@@ -39,8 +39,6 @@ It then continues with the role install.
 ```
 
 ### Ansible notes
-This repository follows the [best practices for content organisation](http://docs.ansible.com/ansible/playbooks_best_practices.html#content-organization).
-
 ```
 # Initial sysprep via SSH for ansible commands
 # You could do this as opposed to the pre_tasks prep section in the playbook
