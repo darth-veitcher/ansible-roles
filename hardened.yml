@@ -1,0 +1,9 @@
+---
+# file: hardened.yml
+- hosts: all
+  gather_facts: no
+  pre_tasks:
+    - include: roles/base/tasks/ssh_setup.yml
+  roles:
+    - base
+    - hardened

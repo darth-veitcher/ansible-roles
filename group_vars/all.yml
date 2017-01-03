@@ -1,0 +1,18 @@
+---
+# file: group_vars/all.yml
+#
+# Refactored out `global` variables from underlying roles such as `ansible`
+# deploy user and associated items with SSH access. Previously lived in the
+# `roles/base/vars/main.yml` file.
+#
+local_deploy_path: deploy
+
+ubuntu_common_ssh_port: 22222
+
+ubuntu_common_deploy_user_name: adminlocal
+
+ubuntu_common_logwatch_email: myemailaddress@dot.com
+
+# this will be used as the `adminlocal` key. Configure as a path or simply use
+# the name of the file in ~/.ssh/
+default_ssh_key: ansible.id_rsa

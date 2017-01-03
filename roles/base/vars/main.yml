@@ -1,7 +1,21 @@
 ---
 # file: roles/base/vars/main.yml
 
-local_deploy_path: deploy
+# Variables below moved to `global` file for multiple roles coverage.
+# Now controlled from `group_vars/all.yml`. Maintained here for backwards
+# compatability and to allow for this to remain a standalone role if wanted.
+#
+# local_deploy_path: deploy
+#
+# ubuntu_common_ssh_port: 22222
+#
+# ubuntu_common_deploy_user_name: adminlocal
+#
+# ubuntu_common_logwatch_email: myemailaddress@dot.com
+#
+# # this will be used as the `adminlocal` key. Configure as a path
+# default_ssh_key: ansible.id_rsa
+
 
 ubuntu_common_required_packages:
   - ufw
@@ -21,15 +35,6 @@ ubuntu_common_optional_packages:
   - ntp
   - nfs-common
   - screen
-
-ubuntu_common_ssh_port: 22222
-
-ubuntu_common_deploy_user_name: adminlocal
-
-ubuntu_common_logwatch_email: myemailaddress@dot.com
-
-# this will be used as the `adminlocal` key. Configure as a path
-default_ssh_key: ansible.id_rsa
 
 # only these users will have SSH access to the server
 ssh_users:

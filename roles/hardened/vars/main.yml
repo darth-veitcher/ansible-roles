@@ -1,0 +1,14 @@
+---
+# file: roles/base/vars/main.yml
+
+# Override allowed users for SSH. Anyone below will be added to `ssh-users`
+# group. NB: Anyone in `sudo` will automatically be added unless escaped with
+# a `false` below.
+
+ssh_users_group: ssh-users
+ssh_users:
+    - name: "{{ ubuntu_common_deploy_user_name }}"
+
+auto_add_sudo: true
+
+force_new_host_keys: true

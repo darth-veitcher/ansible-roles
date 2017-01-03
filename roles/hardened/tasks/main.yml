@@ -1,0 +1,159 @@
+---
+# file: hardened/tasks/main.yml
+
+# Disable the root account
+- name: disable root
+  command: usermod -p '*' root
+  tags: users
+
+# Ensure sudo needs a password
+- name: force password with sudo
+  lineinfile: dest=/etc/sudoers
+              regexp="^\%sudo\s*ALL\=\(ALL\:ALL\)\s*NOPASSWD\:\s*ALL"
+              line="%sudo ALL=(ALL:ALL) ALL"
+              state=present
+  tags: users
+
+# Create `ssh-users` group
+- name: create `ssh-users` group
+  group:
+    name: "{{ ssh_users_group }}"
+    state: present
+  tags: users
+
+# Add users to `ssh-users` group
+- name: add users to `ssh-users`
+  user:
+    name: "{{ item.name }}"
+    append: yes
+    groups: "{{ ssh_users_group }}"
+  tags: users
+  with_items: "{{ ssh_users }}"
+
+# Modify `sshd_config` to lockdown to specific groups
+- name: disable all ssh except for `ssh-users`
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^AllowGroups"
+              line="AllowGroups {{ ssh_users_group }}"
+              state=present
+  when: not {{ auto_add_sudo|default(true)|bool }}
+  tags: ssh
+
+# Modify `sshd_config` to add sudo access
+- name: disable all ssh except for `ssh-users` and `sudo`
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^AllowGroups"
+              line="AllowGroups {{ ssh_users_group }} sudo"
+              state=present
+  when: "{{ auto_add_sudo|bool }}"
+  tags: ssh
+
+# Increase size of ssh key and remove insecure Ciphers/MACs/Keys
+- name: increase size of hostkey and disable insecure ciphers
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="{{ item.original }}"
+              line="{{ item.replacement }}"
+  with_items:
+      - original: "^Protocol"
+        replacement: "Protocol 2"
+      - original: "^ServerKeyBits"
+        replacement: "ServerKeyBits 4096  # `hardened edition`"
+      - original: "^Ciphers"
+        replacement: "Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr  # `hardened edition`"
+      - original: "^MACs"
+        replacement: "MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-ripemd160-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,hmac-ripemd160,umac-128@openssh.com  # `hardened edition`"
+      - original: "^KexAlgorithms"
+        replacement: "KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256  # `hardened edition`"
+      - original: "^HostKey /etc/ssh/ssh_host_dsa_key"
+        replacement: "#HostKey /etc/ssh/ssh_host_dsa_key  # `hardened edition`"
+      - original: "^HostKey /etc/ssh/ssh_host_ecdsa_key"
+        replacement: "#HostKey /etc/ssh/ssh_host_ecdsa_key  # `hardened edition`"
+  tags: ssh
+
+# Change ssh moduli
+- name: check if `/etc/ssh/moduli` exists
+  stat:
+    path: "/etc/ssh/moduli"
+  register: ssh_moduli
+
+- name: create `/etc/ssh/moduli` if it doesn't exist
+  command: "{{ item }}"
+  with_items:
+      - "ssh-keygen -G /etc/ssh/moduli.all -b 4096"
+      - "ssh-keygen -T /etc/ssh/moduli.safe -f /etc/ssh/moduli.all"
+      - "mv /etc/ssh/moduli.safe /etc/ssh/moduli"
+      - "rm /etc/ssh/moduli.all"
+  when: not ssh_moduli.stat.exists
+  tags: ssh
+
+- name: modify `/etc/ssh/moduli` if it exists
+  raw: "{{ item }}"
+  with_items:
+      - "awk '$5 > 2000' /etc/ssh/moduli > /tmp/moduli"
+      - "mv /tmp/moduli /etc/ssh/moduli"
+  when: ssh_moduli.stat.exists
+  tags: ssh
+
+# Regenerate keys
+- name: find non-compliant keys
+  find:
+    paths: "/etc/ssh"
+    patterns: "^ssh_host_(?!rsa|ed25519).*$"
+    use_regex: True
+  register: non_compliant_keys
+  tags: ssh
+
+- name: remove non-compliant ssh keys
+  file:
+      path: "{{ item.path }}"
+      state: absent
+  with_items: "{{ non_compliant_keys.files }}"
+  tags: ssh
+
+# - name: find compliant keys
+#   find:
+#     paths: "/etc/ssh"
+#     patterns: "^ssh_host_(rsa|ed25519).*$"
+#     use_regex: True
+#   register: compliant_keys
+#   when: "{{ force_new_host_keys|default(true)|bool }}"
+#   tags: ssh
+
+# We need to create then replace, otherwise connection is dropped if you
+# delete originals first.
+- name: create temp folder for ssh build
+  tempfile:  # <-- only available in v2.3 so might need to change to '/tmp' with `file`
+    state: directory
+    suffix: ssh
+  register: ssh_temp_folder
+  when: "{{ force_new_host_keys|default(true)|bool }}"
+  tags: ssh
+
+- name: regenerate ssh keys
+  shell: "{{ item }}"
+  with_items:
+    - "ssh-keygen -t ed25519 -f '{{ ssh_temp_folder.path }}'/ssh_host_ed25519_key -q -o -a 5000000 -N '' < /dev/null"
+    - "ssh-keygen -t rsa -b 4096 -f '{{ ssh_temp_folder.path }}'/ssh_host_rsa_key -q -o -a 5000000 -N '' < /dev/null"
+  when: "{{ force_new_host_keys|default(true)|bool }}"
+  tags: ssh
+
+- name: find new compliant keys
+  find:
+    paths: "{{ ssh_temp_folder.path }}"
+    patterns: "^ssh_host_(rsa|ed25519).*$"
+    use_regex: True
+  register: compliant_keys
+  when: "{{ force_new_host_keys|default(true)|bool }}"
+  tags: ssh
+
+# Have to `cat` the files due to `mv` restrictions
+- name: replace compliant ssh keys
+  shell: cat "{{ item.path }}" > "{{ item.path|replace('{{ ssh_temp_folder.path }}', '/etc/ssh') }}"
+  with_items: "{{ compliant_keys.files }}"
+  when: "{{ force_new_host_keys|default(true)|bool }}"
+  tags: ssh
+
+# Now restart ssh for changes to take effect
+- name: restart ssh...
+  service: name=ssh state=restarted enabled=yes
+  tags: ssh

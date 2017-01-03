@@ -17,12 +17,14 @@
   become: no
   register: default_ssh
 
+- debug:
+    msg: "{{ default_ssh }}"
 # If reachable, continue the following tasks with this port
 - name: Set inventory ansible_port to default
   set_fact:
     ansible_port: "22"
-  when: default_ssh is defined and
-        default_ssh.state == "started"
+  when: (default_ssh is defined) and
+        (not default_ssh|failed)
   register: ssh_port_set
 
 # If unreachable on port 22, check if we're able to reach
@@ -85,3 +87,10 @@
     ansible_ssh_private_key_file: "{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ ubuntu_common_deploy_user_name }}/{{ default_ssh_key }}"
     ansible_become_pass: "{{ admin_password }}"
   when: adminlocal_exists.stat.exists == True
+
+- debug:
+    msg: "User: {{ ansible_user }} | Port: {{ ansible_port }}"
+    #   - "Pass: {{ ansible_become_pass|default(none) }}"
+    #   - "Key: {{ ansible_ssh_private_key_file|default(none) }}"
+    #   - "Port: {{ ansible_port }}"
+    #   - "Target: {{ ansible_fqdn }}"
