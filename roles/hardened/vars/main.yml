@@ -12,3 +12,6 @@ ssh_users:
 auto_add_sudo: true
 
 force_new_host_keys: true
+
+# change the below to false in order to skip Google Auth 2FA
+enable_2fa: true

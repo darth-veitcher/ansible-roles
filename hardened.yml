@@ -5,5 +5,5 @@
   pre_tasks:
     - include: roles/base/tasks/ssh_setup.yml
   roles:
-    - base
+    # - base
     - hardened

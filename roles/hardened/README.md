@@ -16,6 +16,8 @@ Builds upon the `base` role and adds additional server hardening including:
 * [x] Disable sudo without password
 * [x] Disable the root account's user login
 * [ ] Google Authenticator (2FA) for any SSH users and forced application
+    * [ ] Fix returned QR code in line with
+    [URL schema](https://github.com/google/google-authenticator/wiki/Key-Uri-Format)
 * [ ] IDS and notifications with Monit
 * [ ] Implement [pass](https://www.passwordstore.org) for storing local data.
 

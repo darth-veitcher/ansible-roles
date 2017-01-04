@@ -1,0 +1,121 @@
+---
+# file: hardened/tasks/google-auth.yml
+# Used for adding Google Auth (2FA) hardening to user logins and ssh. Included
+# as separate .yml with an import so can be ignored if not wanted.
+
+- name: install google-authenticator and qrencode
+  apt: name="{{ item }}" state=installed
+  with_items:
+      - libpam-google-authenticator
+      - qrencode
+      - at
+  tags: apt
+
+- name: ensure ntp is setup
+  apt: name=ntp state=installed
+  tags: apt
+
+- name: create temp folder for google-auth files
+  tempfile:  # <-- only available in v2.3 so might need to change to '/tmp' with `file`
+    state: directory
+    suffix: google-auth
+  register: gauth_temp_folder
+  tags: google-auth
+
+- name: create deploy folder
+  file:
+    path: "deploy/google-auth/{{ inventory_hostname }}"
+    state: directory
+  delegate_to: "localhost"
+  become: no
+
+- name: allow all users to write to tempfolder
+  file:
+    path: "{{ gauth_temp_folder.path }}"
+    mode: 0660
+    group: "{{ ssh_users_group }}"
+    recurse: yes
+    state: directory
+  tags: google-auth
+
+- name: generate google-auth details
+  raw : sudo -Hu "{{ item.name }}" google-authenticator -q -t -f -d -r 3 -R 30 -w 5 -l "{{ item.name }}@{{ inventory_hostname }}"
+  with_items: "{{ ssh_users }}"
+  tags: google-auth
+  register: gauth_generated
+
+- name: copy details to tmp folder
+  raw: cat $(getent passwd {{ item.name }} | awk -F':' '{ print $6 }')/.google_authenticator > "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.txt"
+  with_items: "{{ ssh_users }}"
+  tags: google-auth
+
+- name: encode QR code
+  raw: head -n 1 $(getent passwd adminlocal | awk -F':' '{ print $6 }')/.google_authenticator | qrencode -o - -s 6 -m 1 >> "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.png"
+  with_items: "{{ ssh_users }}"
+  tags: google-auth
+
+- name: create deploy folder
+  file:
+    path: "deploy/google-auth/{{ inventory_hostname }}"
+    state: directory
+  delegate_to: "localhost"
+  become: no
+
+- name: find all google-auth files
+  find:
+    paths: "{{ gauth_temp_folder.path }}"
+    patterns: ".*\\.(txt|png)$"
+    use_regex: True
+  register: gauth_files
+  tags: google-auth
+
+- name: delete existing google-auth files
+  file:
+    path: "deploy/google-auth/{{ inventory_hostname }}/{{ item.path }}"
+    state: absent
+  with_items: "{{ gauth_files.files }}"
+  delegate_to: "localhost"
+  become: no
+  tags: google-auth
+
+- name: pull back details
+  fetch:
+    src: "{{ item.path }}"
+    dest: "deploy/google-auth/{{ inventory_hostname }}/"
+    flat: yes
+  with_items: "{{ gauth_files.files }}"
+  tags: google-auth
+
+- name: enable ChallengeResponseAuthentication
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^ChallengeResponseAuthentication no$"
+              line="ChallengeResponseAuthentication yes"
+  tags: ssh
+# - name: sed ChallengeResponseAuthentication
+#   raw: sed -i.bak 's/^ChallengeResponseAuthentication no$/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
+#   tags: sed, ssh
+
+- name: force use of both keys and 2fa
+  lineinfile: dest=/etc/ssh/sshd_config
+              regexp="^AuthenticationMethods.*$"
+              line="AuthenticationMethods publickey,keyboard-interactive"
+  tags: ssh
+
+# Now restart ssh for changes to take effect
+# Need to do this with `at` given we're about to lock ourselves out with PAM...
+- name: copy hack script...
+  copy: src=files/temp.sh dest=/tmp/temp.sh
+  tags: ssh
+
+- name: restart ssh...
+  raw: sudo -Hu root at now +1 min -f /tmp/temp.sh
+  tags: ssh
+
+# RedHat etc. use `system-auth`
+- name: modify PAM configuration globally (not just for SSH)
+  lineinfile: dest=/etc/pam.d/common-auth
+              regexp="^auth.*google.*$"
+              line="auth    [success=done new_authtok_reqd=done default=die]    pam_google_authenticator.so    nullok"
+              insertbefore=BOF
+              state=present
+  tags: pam
