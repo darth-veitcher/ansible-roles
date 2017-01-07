@@ -38,11 +38,24 @@
     state: directory
   tags: google-auth
 
+# Run `google-authenticator` with following parameters
+# -q, --quiet              Quiet mode
+# -t, --time-based         Set up time-based (TOTP) verification
+# -f, --force              Write file without first confirming with user
+# -d, --disallow-reuse     Disallow reuse of previously used TOTP tokens // all
+# -D, --allow-reuse        Allow reuse of previously used TOTP tokens // ansible
+# -r, --rate-limit=N       Limit logins to 3 per every M seconds
+# -R, --rate-time=M        Limit logins to N per every 30 seconds
+# -w, --window-size=w      Set window of concurrently valid codes
+# -l
 - name: generate google-auth details
-  raw : sudo -Hu "{{ item.name }}" google-authenticator -q -t -f -d -r 3 -R 30 -w 5 -l "{{ item.name }}@{{ inventory_hostname }}"
+  raw : sudo -Hu {{ item.name }} google-authenticator -q -t -f -d -r 3 -R 30 -w 5 -l "{{ item.name }}@{{ inventory_hostname }}"
   with_items: "{{ ssh_users }}"
   tags: google-auth
-  register: gauth_generated
+- name: generate google-auth details ({{ ubuntu_common_deploy_user_name }})
+  raw : sudo -Hu {{ item }} google-authenticator -q -t -f -D -r 10 -R 15 -w 5 -l "{{ item.name }}@{{ inventory_hostname }}"
+  with_items: "{{ ubuntu_common_deploy_user_name }}"
+  tags: google-auth
 
 - name: copy details to tmp folder
   raw: cat $(getent passwd {{ item.name }} | awk -F':' '{ print $6 }')/.google_authenticator > "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.txt"
@@ -86,36 +99,125 @@
   with_items: "{{ gauth_files.files }}"
   tags: google-auth
 
+# Process to return a user's OTP
+# SECRET is always the first line of the .google_authenticator file
+# This is required before `including` the `request-new-code` helper.
+- name: return '{{ ubuntu_common_deploy_user_name }}' secret
+  shell: head -n 1 $(getent passwd "{{ ubuntu_common_deploy_user_name }}" | awk -F':' '{ print $6 }')/.google_authenticator
+  register: get_secret
+- name: set SECRET_KEY as fact
+  set_fact:
+    SECRET_KEY: "{{ get_secret.stdout }}"
+- debug:
+    msg: "SECRET_KEY set to {{ SECRET_KEY }}"
+
+# Now modify PAM
 - name: enable ChallengeResponseAuthentication
   lineinfile: dest=/etc/ssh/sshd_config
               regexp="^ChallengeResponseAuthentication no$"
               line="ChallengeResponseAuthentication yes"
   tags: ssh
-# - name: sed ChallengeResponseAuthentication
-#   raw: sed -i.bak 's/^ChallengeResponseAuthentication no$/ChallengeResponseAuthentication yes/g' /etc/ssh/sshd_config
-#   tags: sed, ssh
 
+# The ',' between methods forces both (a space would mean either)
 - name: force use of both keys and 2fa
   lineinfile: dest=/etc/ssh/sshd_config
               regexp="^AuthenticationMethods.*$"
               line="AuthenticationMethods publickey,keyboard-interactive"
   tags: ssh
+- include: library/request-new-code.yml
 
-# Now restart ssh for changes to take effect
 # Need to do this with `at` given we're about to lock ourselves out with PAM...
-- name: copy hack script...
-  copy: src=files/temp.sh dest=/tmp/temp.sh
-  tags: ssh
-
-- name: restart ssh...
-  raw: sudo -Hu root at now +1 min -f /tmp/temp.sh
-  tags: ssh
+# - name: copy hack script...
+#   copy: src=files/delayed_restart_ssh.sh dest=/tmp/temp.sh
+#   tags: ssh
+#
+# - name: restart ssh...
+#   raw: sudo -Hu root at now +1 min -f /tmp/temp.sh
+#   tags: ssh
 
 # RedHat etc. use `system-auth`
-- name: modify PAM configuration globally (not just for SSH)
-  lineinfile: dest=/etc/pam.d/common-auth
-              regexp="^auth.*google.*$"
-              line="auth    [success=done new_authtok_reqd=done default=die]    pam_google_authenticator.so    nullok"
-              insertbefore=BOF
-              state=present
-  tags: pam
+- name: modify PAM configuration for SSH
+  blockinfile:
+    dest: /etc/pam.d/sshd
+    insertbefore: BOF
+    marker: "# {mark} GOOGLE AUTHENTICATOR MANAGED BLOCK"
+    block: |
+      # don't allow `nullok`
+      # first factor is ssh key, second factor google-auth therefore
+      # `success=done` (i.e. bypass need for password)
+      auth    [success=done new_authtok_reqd=done default=die]    pam_google_authenticator.so
+- include: library/request-new-code.yml
+
+# Now restart ssh for changes to take effect
+- name: restart ssh...
+  service: name=ssh state=restarted enabled=yes
+  tags: ssh
+- include: library/request-new-code.yml
+
+- name: modify PAM configuration for logins
+  blockinfile:
+    dest: /etc/pam.d/login
+    insertbefore: BOF
+    marker: "# {mark} ANSIBLE MANAGED BLOCK"
+    block: |
+      # don't allow `nullok`
+      # use `required` to force usage of password as second factor
+      auth    required    pam_google_authenticator.so
+- include: library/request-new-code.yml
+
+# - name: modify PAM configuration globally (not just for SSH)
+#   blockinfile:
+#     dest: /etc/pam.d/common-auth
+#     insertbefore: BOF
+#     marker: "# {mark} GOOGLE AUTHENTICATOR MANAGED BLOCK"
+#     block: |
+#       # google-authenticator (don't allow `nullok`)
+#       auth    [success=done new_authtok_reqd=done default=die]    pam_google_authenticator.so
+# - include: library/request-new-code.yml
+
+- name: create `testpam` user so we can confirm "{{ ubuntu_common_deploy_user_name }}" can login but they can't without 2FA
+  user:
+    name: "{{ item.name }}"
+    password: "{{ lookup('password', '{{ local_deploy_path }}/password/{{ inventory_hostname }}/{{ item.name }}.txt chars=ascii_letters,digits length=30 encrypt=md5_crypt') }}"  # encrypt=md5_crypt'
+    state: present
+    update_password: on_create  # always / on_create
+    createhome: yes
+    shell: /bin/bash
+    generate_ssh_key: yes
+    ssh_key_bits: 4096
+    ssh_key_file: ".ssh/{{ default_ssh_key }}"
+  with_items:
+    - name: testPAM
+- include: library/request-new-code.yml
+
+- name: fetch user's public keys
+  fetch:
+    src: "/home/{{ item.name }}/.ssh/{{ default_ssh_key }}.pub"
+    dest: "{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/"
+    flat: yes
+  with_items:
+    - name: testPAM
+  tags: users
+- include: library/request-new-code.yml
+
+- name: fetch user's private keys
+  fetch:
+    src: "/home/{{ item.name }}/.ssh/{{ default_ssh_key }}"
+    dest: "{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/"
+    flat: yes
+  with_items:
+    - name: testPAM
+  tags: users
+- include: library/request-new-code.yml
+
+- name: authorise public key
+  authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ lookup('file', '{{ local_deploy_path }}/ssh/{{ inventory_hostname }}/{{ item.name }}/{{ default_ssh_key }}.pub') }}"
+    state: present
+  with_items:
+    - name: testPAM
+  tags:
+    - users
+    - ssh
+- include: library/request-new-code.yml

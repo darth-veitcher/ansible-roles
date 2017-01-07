@@ -15,3 +15,5 @@ force_new_host_keys: true
 
 # change the below to false in order to skip Google Auth 2FA
 enable_2fa: true
+2fa_test_user:
+  - name: testPAM
