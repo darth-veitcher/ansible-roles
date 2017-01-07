@@ -126,15 +126,6 @@
   tags: ssh
 - include: library/request-new-code.yml
 
-# Need to do this with `at` given we're about to lock ourselves out with PAM...
-# - name: copy hack script...
-#   copy: src=files/delayed_restart_ssh.sh dest=/tmp/temp.sh
-#   tags: ssh
-#
-# - name: restart ssh...
-#   raw: sudo -Hu root at now +1 min -f /tmp/temp.sh
-#   tags: ssh
-
 # RedHat etc. use `system-auth`
 - name: modify PAM configuration for SSH
   blockinfile:
