@@ -1,7 +1,7 @@
 ---
 # file: base/tasks/main.yml
 - name: bootstrap ansible requirements
-  raw: sudo apt-get install software-properties-common python2.7 python-apt -y
+  raw: sudo apt-get update && sudo apt-get install software-properties-common python2.7 python-apt -y
   tags: apt
 
 # Gather facts should be set to false when running this role since it will

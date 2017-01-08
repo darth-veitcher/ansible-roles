@@ -15,8 +15,12 @@
   tags: users
 
 # Import tasks for ssh hardening
-# - include: ssh.yml
+- include: ssh.yml
 
 # Enable Google Auth 2FA
 - include: google-auth.yml
   when: "{{ enable_2fa|default(true)|bool }}"
+
+# Install `cracklib` to improve password security
+- name: install cracklib
+  apt: name=libpam-cracklib state=installed

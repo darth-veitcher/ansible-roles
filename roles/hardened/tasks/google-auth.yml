@@ -164,3 +164,27 @@
       # don't allow `nullok`
       # use `required` to force usage of password as second factor
       auth    required    pam_google_authenticator.so
+- include: library/request-new-code.yml
+
+- name: create fail2ban jail for google-auth
+  template: >
+            src=templates/fail2ban/jail.gauth.conf.j2
+            dest=/etc/fail2ban/jail.d/gauth.conf owner=root group=root mode=0644
+  tags:
+    - firewall
+    - ssh
+- include: library/request-new-code.yml
+
+- name: create fail2ban filter for google-auth
+  template: >
+            src=templates/fail2ban/filter.gauth.conf.j2
+            dest=/etc/fail2ban/filter.d/gauth.conf owner=root group=root mode=0644
+  tags:
+    - firewall
+    - ssh
+- include: library/request-new-code.yml
+
+- name: restart fail2ban
+  service: name=fail2ban state=restarted enabled=yes
+  tags: ssh
+- include: library/request-new-code.yml

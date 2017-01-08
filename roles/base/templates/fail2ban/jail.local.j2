@@ -7,7 +7,7 @@ port = {{ ubuntu_common_ssh_port }}
 filter = sshd
 action = ufw[name=SSH, port=ssh, protocol=tcp]
 logpath = %(sshd_log)s
-maxretry = 5 # Override the default of 3
+maxretry = 5 ;# Override the default of 3
 
 [sshd-ddos]
 port    = {{ ubuntu_common_ssh_port }}
