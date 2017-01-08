@@ -29,14 +29,14 @@
   delegate_to: "localhost"
   become: no
 
-- name: allow all users to write to tempfolder
-  file:
-    path: "{{ gauth_temp_folder.path }}"
-    mode: 0660
-    group: "{{ ssh_users_group }}"
-    recurse: yes
-    state: directory
-  tags: google-auth
+# - name: allow all users to write to tempfolder
+#   file:
+#     path: "{{ gauth_temp_folder.path }}"
+#     mode: 0660
+#     group: "{{ ssh_users_group }}"
+#     recurse: yes
+#     state: directory
+#   tags: google-auth
 
 # Run `google-authenticator` with following parameters
 # -q, --quiet              Quiet mode
@@ -53,17 +53,27 @@
   with_items: "{{ ssh_users }}"
   tags: google-auth
 - name: generate google-auth details ({{ ubuntu_common_deploy_user_name }})
-  raw : sudo -Hu {{ item }} google-authenticator -q -t -f -D -r 10 -R 15 -w 5 -l "{{ item.name }}@{{ inventory_hostname }}"
-  with_items: "{{ ubuntu_common_deploy_user_name }}"
+  raw : sudo -Hu {{ item }} google-authenticator -q -t -f -D -r 10 -R 15 -w 5 -l "{{ item }}@{{ inventory_hostname }}"
+  with_items:
+    - "{{ ubuntu_common_deploy_user_name }}"
   tags: google-auth
 
 - name: copy details to tmp folder
-  raw: cat $(getent passwd {{ item.name }} | awk -F':' '{ print $6 }')/.google_authenticator > "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.txt"
+  raw: cat $(getent passwd "{{ item.name }}" | awk -F':' '{ print $6 }')/.google_authenticator > "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.txt"
   with_items: "{{ ssh_users }}"
   tags: google-auth
 
-- name: encode QR code
-  raw: head -n 1 $(getent passwd adminlocal | awk -F':' '{ print $6 }')/.google_authenticator | qrencode -o - -s 6 -m 1 >> "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.png"
+# - name: encode QR code
+#   raw: head -n 1 $(getent passwd adminlocal | awk -F':' '{ print $6 }')/.google_authenticator | qrencode -o - -s 6 -m 1 >> "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.png"
+#   with_items: "{{ ssh_users }}"
+#   tags: google-auth
+- name: copy script across
+  copy:
+    src: roles/hardened/files/generate-qr.py
+    dest: "{{ gauth_temp_folder.path }}/generate-qr.py"
+    mode: 0700
+- name: encode QR code to png
+  raw: python "{{ gauth_temp_folder.path }}/generate-qr.py" -i {{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.txt -u {{ item.name }}@{{ inventory_hostname }} --issuer scratchpad -o "{{ gauth_temp_folder.path }}/{{ item.name }}-google-auth.png"
   with_items: "{{ ssh_users }}"
   tags: google-auth
 
