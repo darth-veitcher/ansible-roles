@@ -1,12 +1,12 @@
 # Hardened Edition
 Builds upon the `base` role and adds additional server hardening including:
 
-* [x] Increase security levels of SSH using appropriate Ciphers, MACs and Keys
-* [ ] Create ssh keys using `ssh_key_passphrase` with the
-    [User Module](http://docs.ansible.com/ansible/user_module.html).
-* [ x] Install `cracklib` to improve PAM security
-    * [ ] Password must be a minimum of 15 characters
-    * [ ] New password must:
+* [x] Increase security levels of SSH using appropriate Ciphers / MACs / Keys
+<!-- * [ ] Create ssh keys using `ssh_key_passphrase` with the
+    [User Module](http://docs.ansible.com/ansible/user_module.html). -->
+* [x] Install `cracklib` to improve PAM security
+    * [x] Password must be a minimum of 15 characters
+    * [x] New password must:
         * differ from old one by 5 characters;
         * contain at least:
             * 1 uppercase;
@@ -15,12 +15,12 @@ Builds upon the `base` role and adds additional server hardening including:
             * 1 symbol.
 * [x] Disable sudo without password
 * [x] Disable the root account's user login
-* [x] Google Authenticator (2FA) for any SSH users and all terminal logins
-    * [x] Fix returned QR code in line with
-    [URL schema](https://github.com/google/google-authenticator/wiki/Key-Uri-Format)
-    * Ensure Fail2Ban picks up failed logins (incorrect codes)
+* [x] Google Authenticator (2FA) for any SSH users and  terminal logins
+    * [x] Ensure Fail2Ban picks up failed logins (incorrect codes)
+    <!-- * [x] Fix returned QR code in line with
+    [URL schema](https://github.com/google/google-authenticator/wiki/Key-Uri-Format) -->
 * [ ] IDS and notifications with Monit
-* [ ] Implement [pass](https://www.passwordstore.org) for storing local data.
+* [ ] Implement [pass](https://www.passwordstore.org) for storing data
 
 ## Important note
 This role currently depends on the `tempfile` module which is only available

@@ -1,0 +1,8 @@
+# file: /etc/monit/conf.d/ssh-logins
+check file ssh_logins with path /var/log/auth.log
+
+# Whitelist IPs here if needed
+# ignore match "/etc/monit/whitelist_ips.regex"
+
+# Given we setup 2FA for all SSH logins shouldn't see this
+if match "Accepted keyboard-interactive/pam" then alert

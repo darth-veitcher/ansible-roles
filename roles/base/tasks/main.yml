@@ -189,7 +189,7 @@
 # Need to run this again to reconfigure dynamically the ansible port now we
 # have changed it on-the-fly. If this fails then the firewall won't be enabled
 # luckily so we can still get back in. That's the final task below.
-- include: ./ssh_setup.yml
+- include: library/ssh_setup.yml
 
 - name: enable ufw
   ufw: state=enabled

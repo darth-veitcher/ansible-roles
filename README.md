@@ -28,10 +28,10 @@ ansible-roles
 ## Initial Usage Examples:
 ```bash
 # Uses an (optional) ansible config file
-export ANSIBLE_CONFIG=ansible.cfg && ansible-playbook -kb --ask-become-pass -i inventoryFile base.yml -vvvv
+export ANSIBLE_CONFIG=ansible.cfg && ansible-playbook -kb --ask-become-pass -i inventoryFile role.yml -vvvv
 ```
 
 ## TODO
 * [ ] *Potentially* use `vault` as opposed to plaintext storage per
 [docs](http://docs.ansible.com/ansible/playbooks_vault.html).
-* [ ] Refactor key variables and shared scripts into a central location
+* [x] Refactor key variables and shared scripts into a central location

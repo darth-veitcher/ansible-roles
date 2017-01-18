@@ -29,15 +29,6 @@
   delegate_to: "localhost"
   become: no
 
-# - name: allow all users to write to tempfolder
-#   file:
-#     path: "{{ gauth_temp_folder.path }}"
-#     mode: 0660
-#     group: "{{ ssh_users_group }}"
-#     recurse: yes
-#     state: directory
-#   tags: google-auth
-
 # Run `google-authenticator` with following parameters
 # -q, --quiet              Quiet mode
 # -t, --time-based         Set up time-based (TOTP) verification
@@ -47,7 +38,7 @@
 # -r, --rate-limit=N       Limit logins to 3 per every M seconds
 # -R, --rate-time=M        Limit logins to N per every 30 seconds
 # -w, --window-size=w      Set window of concurrently valid codes
-# -l
+# -l                       Add a label to explain what it is
 - name: generate google-auth details
   raw : sudo -Hu {{ item.name }} google-authenticator -q -t -f -d -r 3 -R 30 -w 5 -l "{{ item.name }}@{{ inventory_hostname }}"
   with_items: "{{ ssh_users }}"

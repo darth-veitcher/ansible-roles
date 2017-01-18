@@ -136,7 +136,7 @@
 
 # Have to `cat` the files due to `mv` restrictions
 - name: replace compliant ssh keys
-  shell: cat "{{ item.path }}" > "{{ item.path|replace('{{ ssh_temp_folder.path }}', '/etc/ssh') }}"
+  shell: cat {{ item.path }} > {{ item.path|replace(item.path|dirname, '/etc/ssh') }}
   with_items: "{{ compliant_keys.files }}"
   when: "{{ force_new_host_keys|default(true)|bool }}"
   tags: ssh

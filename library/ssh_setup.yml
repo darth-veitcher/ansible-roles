@@ -1,3 +1,7 @@
+# Helper function to allow auto-discovery of ssh settings for a host.
+# Particularly useful for deployments where you are changing the ssh port as
+# part of an initial setup and install.
+
 # ansible_port can change throughout this role, keep a copy around
 - name: Set configured port fact
   set_fact:
